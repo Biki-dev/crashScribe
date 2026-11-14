@@ -1,0 +1,20 @@
+{
+  "name": "crashscribe-backend",
+  "version": "1.0.0",
+  "description": "CrashScribe — Backend microservices for Assam Police accident reporting",
+  "private": true,
+  "workspaces": [
+    "backend/services/*"
+  ],
+  "scripts": {
+    "init:db": "bash backend/scripts/init_databases.sh"
+  },
+  "keywords": [
+    "edar",
+    "assam-police",
+    "accident-reporting",
+    "offline-first"
+  ],
+  "author": "CrashScribe Team",
+  "license": "UNLICENSED"
+}
