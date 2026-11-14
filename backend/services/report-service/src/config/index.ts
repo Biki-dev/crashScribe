@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 // Load .env
+dotenv.config({ path: path.resolve(process.cwd(), '../../../.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 dotenv.config();
@@ -11,4 +12,7 @@ export const config = {
   databaseUrl: process.env.REPORTS_DB_URL || 'postgres://localhost:5432/crashscribe_reports?sslmode=disable',
   useRedis: process.env.USE_REDIS === 'true',
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+  useRabbitMQ: process.env.USE_RABBITMQ === 'true',
+  rabbitmqUrl: process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/',
+  outboxPollIntervalMs: parseInt(process.env.OUTBOX_POLL_INTERVAL_MS || '2000', 10),
 };

@@ -3,6 +3,8 @@ import cors from 'cors';
 import { config } from './config/index.js';
 import { reportRouter } from './routes/report.routes.js';
 import { runMigrations } from './config/migrate.js';
+import { EventBroker } from './config/broker.js';
+import { OutboxPoller } from './services/outbox.service.js';
 
 export const app = express();
 
@@ -16,6 +18,7 @@ app.get('/health', (req, res) => {
     service: 'CrashScribe Report Ingestion & Sync Service',
     port: config.port,
     redis: config.useRedis ? 'ENABLED' : 'IN_MEMORY_FALLBACK',
+    broker: config.useRabbitMQ ? 'RABBITMQ' : 'IN_MEMORY',
     timestamp: new Date().toISOString(),
   });
 });
@@ -27,6 +30,10 @@ app.use('/reports', reportRouter);
 export async function startServer() {
   try {
     await runMigrations();
+
+    // Initialize Event Broker & Launch Outbox CDC Poller
+    await EventBroker.initialize();
+    OutboxPoller.start();
 
     const server = app.listen(config.port, () => {
       console.log(`[Report Service Listening] http://localhost:${config.port}`);

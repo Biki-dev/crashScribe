@@ -10,6 +10,8 @@ const cors_1 = __importDefault(require("cors"));
 const index_js_1 = require("./config/index.js");
 const report_routes_js_1 = require("./routes/report.routes.js");
 const migrate_js_1 = require("./config/migrate.js");
+const broker_js_1 = require("./config/broker.js");
+const outbox_service_js_1 = require("./services/outbox.service.js");
 exports.app = (0, express_1.default)();
 exports.app.use((0, cors_1.default)());
 exports.app.use(express_1.default.json({ limit: '10mb' })); // Allow up to 10mb for batch payloads
@@ -20,6 +22,7 @@ exports.app.get('/health', (req, res) => {
         service: 'CrashScribe Report Ingestion & Sync Service',
         port: index_js_1.config.port,
         redis: index_js_1.config.useRedis ? 'ENABLED' : 'IN_MEMORY_FALLBACK',
+        broker: index_js_1.config.useRabbitMQ ? 'RABBITMQ' : 'IN_MEMORY',
         timestamp: new Date().toISOString(),
     });
 });
@@ -29,6 +32,9 @@ exports.app.use('/reports', report_routes_js_1.reportRouter);
 async function startServer() {
     try {
         await (0, migrate_js_1.runMigrations)();
+        // Initialize Event Broker & Launch Outbox CDC Poller
+        await broker_js_1.EventBroker.initialize();
+        outbox_service_js_1.OutboxPoller.start();
         const server = exports.app.listen(index_js_1.config.port, () => {
             console.log(`[Report Service Listening] http://localhost:${index_js_1.config.port}`);
             console.log(`[Health Endpoint] http://localhost:${index_js_1.config.port}/health`);
