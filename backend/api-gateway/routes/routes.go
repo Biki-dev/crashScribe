@@ -76,8 +76,9 @@ func SetupRouter(cfg *config.Config) (*chi.Mux, error) {
 	r.Route("/api/v1", func(api chi.Router) {
 		// 1. Auth Service Routes (Public login/signup & Protected profile)
 		api.Route("/auth", func(auth chi.Router) {
-			// Public auth endpoints: /signup, /login, /refresh
+			// Public auth endpoints: /signup, /register, /login, /refresh
 			auth.Post("/signup", authProxy.ServeHTTP)
+			auth.Post("/register", authProxy.ServeHTTP)
 			auth.Post("/login", authProxy.ServeHTTP)
 			auth.Post("/refresh", authProxy.ServeHTTP)
 

@@ -11,8 +11,9 @@
 
 The development process follows a strict contract-driven, test-backed engineering sequence:
 1. **Contract-First (OpenAPI 3.1 & Schema Definitions):** All API request/response payloads, headers, error formats, and database entities are strictly specified before coding services.
-2. **Phase 1 (Backend First):** Establish, isolate, containerize, and thoroughly test the high-performance Go API Gateway, 4 microservices, transactional databases, and object storage.
-3. **Phase 2 (Mobile Client & Integration):** Build the Flutter/React Native application with offline SQLite persistence, hardware sensor bridges, dynamic eDAR forms, and user-initiated sync against verified backend endpoints.
+2. **Phase 1 (Backend Infrastructure & Microservices):** Establish, isolate, and thoroughly test the high-performance Go API Gateway, 4 microservices, transactional databases, and object storage.
+3. **Phase 2 (Mobile Client & Integration):** Build the mobile application with offline SQLite persistence, hardware sensor bridges, dynamic eDAR forms, and user-initiated sync against verified backend endpoints.
+4. **Phase 3 (Dockerisation & Deployment):** Containerize all backend services and infrastructure into production-grade multi-stage Docker builds with unified `docker-compose.yml` orchestration and automated container smoke testing.
 
 ```mermaid
 graph TD
@@ -25,7 +26,6 @@ graph TD
         B6["Step 1.6: RabbitMQ Event Broker & Outbox Poller"]
         B7["Step 1.7: Assam Analytics & PostGIS Spatial Svc (:5004)"]
         B8["Step 1.8: Backend Integration & Automated Test Suite"]
-        B9["Step 1.9: Docker Integration & Containerization"]
     end
 
     subgraph P2 ["Phase 2: Mobile Client & Integration"]
@@ -40,9 +40,17 @@ graph TD
         F9["Step 2.9: E2E Acceptance Testing & Offline Field Trials"]
     end
 
-    B1 --> B2 --> B3 --> B4 --> B5 --> B6 --> B7 --> B8 --> B9
-    B9 ==> F1
+    subgraph P3 ["Phase 3: Dockerisation & Deployment"]
+        D1["Step 3.1: Multi-Stage Dockerfiles (Go Gateway & Node Services)"]
+        D2["Step 3.2: Production docker-compose.yml Mesh Orchestration"]
+        D3["Step 3.3: Container Smoke Test & Health Check Verification"]
+    end
+
+    B1 --> B2 --> B3 --> B4 --> B5 --> B6 --> B7 --> B8
+    B8 ==> F1
     F1 --> F2 --> F3 --> F4 --> F5 --> F6 --> F7 --> F8 --> F9
+    F9 ==> D1
+    D1 --> D2 --> D3
 ```
 
 ---
@@ -211,26 +219,6 @@ graph TD
      - Officer register &rarr; Login &rarr; Ingest report &rarr; Verify outbox publication &rarr; Upload image via presigned URL &rarr; Confirm image &rarr; Verify appearance on Analytics Dashboard.
   3. Validate idempotency, duplicate protection, and RBAC boundary enforcement.
 * **Verification:** 100% test pass rate on automated CI test runs.
-
----
-
-### Step 1.9: Docker Integration & Backend Containerization
-* **Goal:** Containerize all backend services and infrastructure into production-grade multi-stage Docker builds with unified `docker-compose.yml` orchestration for reproducible deployment.
-* **Actions:**
-  1. Author Multi-Stage Dockerfiles:
-     - `backend/api-gateway/Dockerfile`: Multi-stage Go build (`golang:1.22-alpine` builder &rarr; distroless or scratch minimal runtime, binary size ~15MB).
-     - `backend/services/auth-service/Dockerfile`: Optimized container build with non-root security user.
-     - `backend/services/report-service/Dockerfile`: Optimized container build.
-     - `backend/services/evidence-service/Dockerfile`: Optimized container build.
-     - `backend/services/analytics-service/Dockerfile`: Optimized container build.
-  2. Implement Production `docker-compose.yml`:
-     - Services: `api-gateway`, `auth-service`, `report-service`, `evidence-service`, `analytics-service`.
-     - Data Stores & Mesh: `postgres-auth`, `postgres-reports`, `postgres-analytics` (PostGIS), `redis`, `rabbitmq`.
-     - Health checks (`HEALTHCHECK CMD ...`), internal Docker bridge network (`crashscribe-network`), and persistent volume bindings.
-     - Environment variable injection via `.env` files with secret masking.
-  3. Author Container Smoke Test Script:
-     - Script `scripts/docker-smoke-test.sh` that spins up the container mesh, waits for health checks to turn green, runs integration smoke queries, and cleanly tears down resources.
-* **Verification:** Running `docker compose up --build -d` starts the entire 5-service mesh + 5 supporting datastores without errors; `docker compose ps` reports all services healthy; API Gateway responds at `http://localhost:8080/health`.
 
 ---
 
@@ -416,6 +404,47 @@ graph TD
 
 ---
 
+# PHASE 3: DOCKERISATION & DEPLOYMENT
+
+---
+
+### Step 3.1: Multi-Stage Dockerfiles (Gateway & Services)
+* **Goal:** Author production-grade multi-stage Docker builds with non-root security contexts, minimal attack surface, and optimized layer caching.
+* **Actions:**
+  1. `backend/api-gateway/Dockerfile`: Multi-stage Go build (`golang:1.22-alpine` builder &rarr; distroless or scratch minimal runtime, binary size ~15MB).
+  2. `backend/services/auth-service/Dockerfile`: Multi-stage Node.js build with non-root user.
+  3. `backend/services/report-service/Dockerfile`: Multi-stage Node.js build with non-root user.
+  4. `backend/services/evidence-service/Dockerfile`: Multi-stage Node.js build with non-root user.
+  5. `backend/services/analytics-service/Dockerfile`: Multi-stage Node.js build with non-root user.
+* **Verification:** All images build successfully locally with `docker build`.
+
+---
+
+### Step 3.2: Production docker-compose.yml Mesh Orchestration
+* **Goal:** Unify all 5 microservices and 5 supporting backing stores into a single self-healing orchestration mesh.
+* **Actions:**
+  1. Author `docker-compose.yml` declaring:
+     - Core API Gateway (`api-gateway` on `:8080`).
+     - Microservices: `auth-service` (:5001), `report-service` (:5002), `evidence-service` (:5003), `analytics-service` (:5004).
+     - Storage & Messaging Mesh: `postgres-auth`, `postgres-reports`, `postgres-analytics` (PostGIS), `redis`, `rabbitmq`.
+  2. Configure container health checks (`HEALTHCHECK CMD ...`), dependency graph (`depends_on: condition: service_healthy`), isolated Docker bridge network (`crashscribe-network`), and named persistent volumes.
+  3. Inject environment variables from `.env` with credential protection.
+* **Verification:** `docker compose up -d` starts the entire system; `docker compose ps` shows all containers healthy.
+
+---
+
+### Step 3.3: Container Smoke Test & Health Check Verification
+* **Goal:** Validate container health, port bindings, and cross-service communication in containerized environment.
+* **Actions:**
+  1. Write automated smoke testing script `scripts/docker-smoke-test.sh`:
+     - Builds and boots docker-compose services.
+     - Awaits green health checks.
+     - Runs the automated E2E script through containerized Gateway `:8080`.
+     - Shuts down containers cleanly.
+* **Verification:** Running `./scripts/docker-smoke-test.sh` exits with code 0.
+
+---
+
 ## 2. Deliverable Checkpoints & Definition of Done (DoD)
 
 | Checkpoint | Phase | DoD Criteria |
@@ -426,3 +455,4 @@ graph TD
 | **Milestone 4** | Phase 2 (Frontend) | Validation bottom sheet, Draft Review screen, and `SAVED_LOCAL` offline storage verified across device restarts. |
 | **Milestone 5** | Phase 2 (Frontend) | Settings Sync Centre successfully connects to Phase 1 backend; manual Sync / Sync All verified with image uploads; zero duplicate records created on retries. |
 | **Milestone 6** | Phase 2 (Frontend) | Assam Dashboard renders live PostGIS clusters and charts; mock voice and model cards verified; full 16-point acceptance test passed. |
+| **Milestone 7** | Phase 3 (Docker) | Multi-stage Dockerfiles and unified `docker-compose.yml` mesh orchestrating all 5 services and 5 datastores verified with green container smoke test. |

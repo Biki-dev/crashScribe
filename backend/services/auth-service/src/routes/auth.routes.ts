@@ -5,6 +5,7 @@ export const authRouter = Router();
 
 // Public routes
 authRouter.post('/signup', AuthController.signup);
+authRouter.post('/register', AuthController.signup);
 authRouter.post('/login', AuthController.login);
 authRouter.post('/refresh', AuthController.refresh);
 

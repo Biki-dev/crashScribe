@@ -163,8 +163,7 @@ PHASE 1: BACKEND (First Priority)
 ├── Step 1.5: Evidence Service (:5003), Cloudflare R2 & crashscribe_evidence
 ├── Step 1.6: RabbitMQ Event Broker & Outbox Poller CDC
 ├── Step 1.7: Assam Analytics & PostGIS Spatial Service (:5004) & crashscribe_analytics
-├── Step 1.8: Backend QA, OpenAPI Specs & Integration Test Suite
-└── Step 1.9: Docker Integration & Containerization (compose mesh)
+└── Step 1.8: Backend QA, OpenAPI Specs & Integration Test Suite
 
 PHASE 2: FRONTEND (Mobile Client)
 ├── Step 2.1: Mobile Foundation, Navigation & Police Design System
@@ -176,6 +175,11 @@ PHASE 2: FRONTEND (Mobile Client)
 ├── Step 2.7: Assam Analytics Dashboard & Interactive Cluster Map
 ├── Step 2.8: Mock Voice Input & Model Download UI Placeholders
 └── Step 2.9: End-to-End Acceptance Testing (All 16 Criteria)
+
+PHASE 3: DOCKERISATION & DEPLOYMENT
+├── Step 3.1: Multi-Stage Dockerfiles (Gateway & Services)
+├── Step 3.2: Production docker-compose.yml Mesh Orchestration
+└── Step 3.3: Container Smoke Test & Health Check Verification
 ```
 
 ---

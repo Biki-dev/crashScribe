@@ -11,7 +11,7 @@ async function runMigrations() {
     const client = await db_js_1.pool.connect();
     try {
         console.log('[Migration] Applying schema migrations for crashscribe_auth...');
-        const migrationPath = path_1.default.resolve(process.cwd(), 'migrations/001_create_auth_tables.sql');
+        const migrationPath = path_1.default.resolve(__dirname, '../../migrations/001_create_auth_tables.sql');
         const sql = fs_1.default.readFileSync(migrationPath, 'utf-8');
         await client.query(sql);
         console.log('[Migration] Migration applied successfully.');

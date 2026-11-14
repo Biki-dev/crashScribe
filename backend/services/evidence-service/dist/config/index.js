@@ -7,6 +7,7 @@ exports.config = void 0;
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
 // Load .env
+dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), '../../../.env') });
 dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), '../../.env') });
 dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), '../.env') });
 dotenv_1.default.config();

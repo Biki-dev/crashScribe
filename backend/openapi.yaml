@@ -1,0 +1,427 @@
+openapi: 3.0.3
+info:
+  title: CrashScribe API
+  description: >
+    Production REST & Spatial Analytics API for Assam Police Offline-First Road Accident Reporting.
+    Adheres strictly to the Ministry of Road Transport & Highways (MoRTH) eDAR schema with
+    AES-256 encrypted evidence storage and CDC-driven PostGIS analytics.
+  version: 1.0.0
+  contact:
+    name: Assam Police Traffic Branch / CrashScribe Engineering
+
+servers:
+  - url: http://localhost:8080
+    description: High-Performance Go API Gateway (Localhost)
+
+paths:
+  /health:
+    get:
+      summary: Gateway Health Check
+      description: Returns health status of the API Gateway router.
+      responses:
+        '200':
+          description: Gateway is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: UP
+                  service:
+                    type: string
+                    example: api-gateway
+
+  # -------------------------------------------------------------
+  # Auth Service Routes (:5001 -> Gateway /api/v1/auth)
+  # -------------------------------------------------------------
+  /api/v1/auth/register:
+    post:
+      summary: Register Officer / Staff Account
+      description: Registers an officer profile. Requires supervisory privilege in production.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Officer registered successfully
+        '400':
+          description: Validation error or duplicate badge ID
+
+  /api/v1/auth/login:
+    post:
+      summary: Officer Login
+      description: Authenticates officer badge number and password, issuing access & refresh JWT tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successfully authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid badge ID or password
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Refresh JWT Token
+      description: Generates a new access token using a valid refresh token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Token renewed
+        '401':
+          description: Invalid or expired refresh token
+
+  /api/v1/auth/profile:
+    get:
+      summary: Get Officer Profile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Officer profile
+        '401':
+          description: Missing or invalid token
+
+  # -------------------------------------------------------------
+  # Report Service Routes (:5002 -> Gateway /api/v1/reports)
+  # -------------------------------------------------------------
+  /api/v1/reports/sync:
+    post:
+      summary: Ingest / Sync Accident Report (eDAR Compliant)
+      description: >
+        Ingests complete accident records with vehicles and casualties.
+        Enforces distributed idempotency via client_generated_id and atomic transactional outbox CDC.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportSyncRequest'
+      responses:
+        '200':
+          description: Report ingested or replayed idempotently
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportSyncResponse'
+        '400':
+          description: Validation error or missing required eDAR fields
+
+  /api/v1/reports/{id}:
+    get:
+      summary: Get Accident Report Details
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Complete report details with vehicles and persons
+        '404':
+          description: Report not found
+
+  /api/v1/reports:
+    get:
+      summary: List Accident Reports
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: district
+          in: query
+          schema:
+            type: string
+        - name: police_station
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Filtered report summaries
+
+  # -------------------------------------------------------------
+  # Evidence Service Routes (:5003 -> Gateway /api/v1/evidence)
+  # -------------------------------------------------------------
+  /api/v1/evidence/presign:
+    post:
+      summary: Generate Presigned Upload URL for Cloudflare R2
+      description: Generates a temporary 15-minute PUT URL for secure direct evidence upload.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [report_id, file_name, file_size_bytes, mime_type, evidence_type]
+              properties:
+                report_id:
+                  type: string
+                  format: uuid
+                file_name:
+                  type: string
+                file_size_bytes:
+                  type: integer
+                mime_type:
+                  type: string
+                evidence_type:
+                  type: string
+                  enum: [SCENE_PHOTO, VEHICLE_DAMAGE, SKETCH, DOCUMENT]
+      responses:
+        '200':
+          description: Presigned URL generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  evidence_id:
+                    type: string
+                    format: uuid
+                  upload_url:
+                    type: string
+                  key:
+                    type: string
+                  expires_in_seconds:
+                    type: integer
+
+  /api/v1/evidence/confirm:
+    post:
+      summary: Confirm Evidence Upload
+      description: Verifies file existence in Cloudflare R2 via HeadObject and activates evidence record.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [evidence_id]
+              properties:
+                evidence_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Evidence confirmed and verified
+        '400':
+          description: Evidence file not found in storage bucket
+
+  # -------------------------------------------------------------
+  # Analytics Service Routes (:5004 -> Gateway /api/v1/analytics)
+  # -------------------------------------------------------------
+  /api/v1/analytics/summary:
+    get:
+      summary: High-Level Accident & Fatality Summary
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: district
+          in: query
+          schema:
+            type: string
+        - name: severity
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Aggregate statistics and top districts
+
+  /api/v1/analytics/map-clusters:
+    get:
+      summary: Spatial Map Clusters (GeoJSON)
+      description: Returns GeoJSON FeatureCollection with strict PII omission (no names/phones).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: district
+          in: query
+          schema:
+            type: string
+        - name: bbox
+          in: query
+          description: minLng,minLat,maxLng,maxLat
+          schema:
+            type: string
+      responses:
+        '200':
+          description: GeoJSON FeatureCollection
+
+  /api/v1/analytics/blackspots:
+    get:
+      summary: Blackspot Road Hotspots
+      description: Identifies collision clusters and risk priority scores for road engineering interventions.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: district
+          in: query
+          schema:
+            type: string
+        - name: minAccidents
+          in: query
+          schema:
+            type: integer
+            default: 2
+      responses:
+        '200':
+          description: Ranked blackspot clusters
+
+  /api/v1/analytics/trends:
+    get:
+      summary: Monthly Accident & Casualty Trends
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: district
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Monthly aggregated time-series
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [badge_id, full_name, email, password, district, police_station]
+      properties:
+        badge_id:
+          type: string
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        district:
+          type: string
+        police_station:
+          type: string
+        phone_number:
+          type: string
+
+    LoginRequest:
+      type: object
+      required: [badge_id, password]
+      properties:
+        badge_id:
+          type: string
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        officer:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            badge_id:
+              type: string
+            full_name:
+              type: string
+            district:
+              type: string
+            police_station:
+              type: string
+
+    ReportSyncRequest:
+      type: object
+      required: [client_generated_id, district, police_station, collision_type, severity, latitude, longitude, accident_timestamp]
+      properties:
+        client_generated_id:
+          type: string
+          format: uuid
+        district:
+          type: string
+        police_station:
+          type: string
+        collision_type:
+          type: string
+        severity:
+          type: string
+          enum: [FATAL, GRIEVOUS, SIMPLE, NON_INJURY]
+        latitude:
+          type: number
+        longitude:
+          type: number
+        accident_timestamp:
+          type: string
+          format: date-time
+        weather:
+          type: string
+        road_type:
+          type: string
+        vehicles:
+          type: array
+          items:
+            type: object
+        persons:
+          type: array
+          items:
+            type: object
+
+    ReportSyncResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: SUCCESS
+        id:
+          type: string
+          format: uuid
+        report_number:
+          type: string
+        idempotent_replay:
+          type: boolean
