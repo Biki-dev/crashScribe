@@ -188,3 +188,99 @@ When generating code or proposing implementations for CrashScribe:
 3. **Respect AI boundaries:** Never import real ONNX/Whisper/TFLite dependencies or audio recording packages for the prototype; always use mock implementations.
 4. **Enforce idempotency:** Ensure all ingestion endpoints and client sync requests use `X-Idempotency-Key` or `client_report_id` checks.
 5. **Database isolation:** Do not introduce cross-database foreign key joins between the microservices.
+
+---
+
+## 7. Repeatable & Viable Testing Strategy
+
+To ensure zero data loss under rural Indian field conditions and strict eDAR conformance, all code must pass a 4-tier automated testing pyramid:
+
+```
+                  ┌────────────────────────┐
+                  │    Field & E2E Tests   │  (Simulated Airplane Mode, App Kill,
+                  │  (Scenario Validations)│   Re-sync, Device Reboots)
+                  ├────────────────────────┤
+                  │   Integration Tests    │  (Gateway -> Service -> DB -> Event Bus ->
+                  │    (API / Cross-Svc)   │   PostGIS Spatial Analytics Verification)
+                  ├────────────────────────┤
+                  │   Component / Service  │  (Idempotency Guards, Outbox Poller,
+                  │     Contract Tests     │   Presigned S3/R2 URL, RBAC Headers)
+                  ├────────────────────────┤
+                  │       Unit Tests       │  (eDAR Schema Validations, Token Sign/Verify,
+                  │  (Pure Business Logic) │   Geo-calc, Local SQLite Migrations)
+                  └────────────────────────┘
+```
+
+### 7.1. Tier 1: Unit & Domain Contract Tests (Fast, Isolated, In-Memory)
+- **Scope:** Pure functions, eDAR entity validation, JWT claim validation, SQLite queries, state machine transitions.
+- **Tools:** Go `testing` / `testify`, Jest / Vitest, Dart `flutter_test`.
+- **Requirements:**
+  - Mock all external I/O (no network, no live DBs required).
+  - Test eDAR validation rules: missing mandatory fields (District, PS, Date, Time, 1+ Vehicle, 1+ Person) must reliably reject invalid reports.
+  - Test JWT token generator and validator with expired and tampered signatures.
+  - Test offline form field-order toggle logic: verify state persistence when toggling Mode A &harr; Mode B.
+- **Repeatable Execution:**
+  ```bash
+  # Go API Gateway unit tests
+  cd backend/api-gateway && go test -v -race ./...
+  # Microservices unit tests
+  npm run test:unit
+  ```
+
+### 7.2. Tier 2: Service & Idempotency Integration Tests
+- **Scope:** Individual microservice endpoints communicating with native test databases.
+- **Test Matrix:**
+  1. **Auth Service (`:5001`):**
+     - Duplicate officer badge registration returns `409 Conflict`.
+     - Valid login returns JWT with claims (`officer_id`, `district`, `role`).
+     - Token refresh rotates token and rejects revoked tokens.
+  2. **Report Ingestion Service (`:5002`):**
+     - **Atomic Transaction Test:** Simulating DB failure during vehicle insert rolls back report and outbox entry.
+     - **Idempotency Replay Test:** Sending the exact same payload with `X-Idempotency-Key: <UUID>` 5 times concurrently must result in exactly 1 database row and 5 `200 OK` responses with identical `server_report_id`.
+  3. **Evidence Service (`:5003`):**
+     - Presigned URL endpoint returns valid Cloudflare R2 / S3 PUT URL for valid image MIME types; rejects non-image files.
+     - Confirmation endpoint marks record `COMPLETED`.
+  4. **Analytics Service (`:5004`):**
+     - PostGIS spatial cluster query returns valid GeoJSON grouping points within 500m.
+     - Verify PII redaction: victim name and phone are strictly omitted from response.
+- **Repeatable Execution:**
+  ```bash
+  npm run test:integration
+  ```
+
+### 7.3. Tier 3: End-to-End Gateway & Event Pipeline Tests
+- **Scope:** Full flow from API Gateway through microservices and event queues.
+- **Scenario:**
+  1. Register Officer &rarr; Login &rarr; Obtain JWT Bearer Token.
+  2. Gateway checks Bearer token, injects `X-Officer-ID` and routes to Ingestion Service.
+  3. Submit accident report with 2 vehicles and 1 casualty.
+  4. Outbox poller detects new record in `report_outbox` and publishes event to RabbitMQ.
+  5. Analytics consumer ingests event and writes spatial record to PostGIS.
+  6. Query `GET /api/v1/analytics/summary` &rarr; assert total count incremented by 1.
+- **Repeatable Execution:**
+  ```bash
+  # Automated curl / Newman script
+  bash backend/scripts/run_e2e_tests.sh
+  ```
+
+### 7.4. Tier 4: Mobile Offline-Resilience & Chaos Testing (Critical)
+To validate the 16 project acceptance criteria, the client must undergo simulated real-world failure tests:
+1. **Zero Auto-Sync Test:**
+   - Create accident report &rarr; Click "Confirm and Save on Device".
+   - Assert network activity: **0 bytes transmitted**.
+   - Assert local DB: status is `SAVED_LOCAL` / `PENDING_SYNC`.
+2. **Airplane Mode & Reboot Test:**
+   - Put mobile in Airplane Mode &rarr; Create report &rarr; Force kill app &rarr; Reboot phone.
+   - Reopen app &rarr; Report remains intact in Settings &rarr; Pending Cloud Sync.
+3. **Mid-Flight Drop & Retry Test:**
+   - Initiate "Sync All" &rarr; Sever network mid-transfer.
+   - Assert: Local records remain preserved in Pending queue; UI displays clear non-destructive error.
+   - Reconnect network &rarr; Tap "Sync All" &rarr; Reports upload successfully, status transitions to `SYNCED`, and zero duplicate rows exist on server.
+4. **Mock AI Decoupling Test:**
+   - Tap microphone icons on narrative fields &rarr; Verify placeholder text injected without crash.
+   - Click Model Download cards &rarr; Verify mock progress bar animates without downloading multi-GB binaries.
+
+### 7.5. Continuous Quality Gates
+- **Zero-Failure Gate:** All unit and integration tests must pass before advancing from Phase 1 to Phase 2.
+- **Linter & Security Scan:** Static analysis with `golangci-lint` (Gateway), `eslint` (Services), and `npm audit`.
+- **Database Rollback Validation:** Every migration script must have an idempotent down/rollback migration tested.
