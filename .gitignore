@@ -40,3 +40,7 @@ bin/
 # Local file storage
 backend/storage/uploads/*
 !backend/storage/uploads/.gitkeep
+
+# Local PostgreSQL database cluster
+.pgdata/
+

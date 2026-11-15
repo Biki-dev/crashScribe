@@ -2,8 +2,10 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 // Load .env from workspace root or parent dirs
+dotenv.config({ path: path.resolve(process.cwd(), '../../../.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config();
 
 export const config = {
