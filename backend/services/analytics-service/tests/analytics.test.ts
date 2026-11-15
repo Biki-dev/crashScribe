@@ -12,6 +12,7 @@ describe('Assam Analytics & Spatial Service Integration Tests', () => {
 
   beforeAll(async () => {
     await migrateAnalytics();
+    await pool.query('DELETE FROM spatial_accident_records WHERE report_number IN (\'REP-KM-001\', \'REP-KM-002\')');
     unsubscribeConsumer = await AnalyticsIngestionService.startConsumer();
   });
 

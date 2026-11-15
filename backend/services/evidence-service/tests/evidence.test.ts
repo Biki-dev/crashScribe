@@ -101,8 +101,8 @@ describe('Evidence Media Service Integration Tests', () => {
   });
 
   it('5. POST /api/v1/evidence/confirm - confirms upload and marks COMPLETED', async () => {
-    // Perform simulated binary upload to Cloudflare R2 presigned URL
-    if (uploadUrl) {
+    // Perform simulated binary upload to Cloudflare R2 presigned URL if external R2
+    if (uploadUrl && uploadUrl.startsWith('https://')) {
       await fetch(uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Type': 'image/jpeg' },

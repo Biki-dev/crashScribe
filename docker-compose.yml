@@ -1,0 +1,258 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # Edge: High-Performance Go API Gateway
+  # ==========================================
+  api-gateway:
+    build:
+      context: ./backend/api-gateway
+      dockerfile: Dockerfile
+    container_name: crashscribe-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - GATEWAY_PORT=8080
+      - GATEWAY_HOST=0.0.0.0
+      - ENVIRONMENT=production
+      - JWT_SECRET=crashscribe_super_secret_jwt_dev_key_2026_assam_police_traffic
+      - AUTH_SERVICE_URL=http://auth-service:5001
+      - REPORT_SERVICE_URL=http://report-service:5002
+      - EVIDENCE_SERVICE_URL=http://evidence-service:5003
+      - ANALYTICS_SERVICE_URL=http://analytics-service:5004
+      - REDIS_URL=redis://redis:6379
+      - RATE_LIMIT_REQUESTS=100
+      - RATE_LIMIT_WINDOW=60s
+    depends_on:
+      - auth-service
+      - report-service
+      - evidence-service
+      - analytics-service
+    networks:
+      - crashscribe-net
+
+  # ==========================================
+  # Microservice 1: Auth & Staff Service (:5001)
+  # ==========================================
+  auth-service:
+    build:
+      context: ./backend/services/auth-service
+      dockerfile: Dockerfile
+    container_name: crashscribe-auth
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    environment:
+      - AUTH_PORT=5001
+      - AUTH_DB_URL=postgres://postgres:postgres@postgres-auth:5432/crashscribe_auth?sslmode=disable
+      - JWT_SECRET=crashscribe_super_secret_jwt_dev_key_2026_assam_police_traffic
+      - JWT_EXPIRATION=15m
+      - REFRESH_TOKEN_EXPIRATION=30d
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    networks:
+      - crashscribe-net
+
+  # ==========================================
+  # Microservice 2: Report Ingestion & Sync (:5002)
+  # ==========================================
+  report-service:
+    build:
+      context: ./backend/services/report-service
+      dockerfile: Dockerfile
+    container_name: crashscribe-reports
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+    environment:
+      - REPORT_PORT=5002
+      - REPORTS_DB_URL=postgres://postgres:postgres@postgres-reports:5432/crashscribe_reports?sslmode=disable
+      - USE_REDIS=true
+      - REDIS_URL=redis://redis:6379
+      - USE_RABBITMQ=true
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      postgres-reports:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - crashscribe-net
+
+  # ==========================================
+  # Microservice 3: Evidence Media Service (:5003)
+  # ==========================================
+  evidence-service:
+    build:
+      context: ./backend/services/evidence-service
+      dockerfile: Dockerfile
+    container_name: crashscribe-evidence
+    restart: unless-stopped
+    ports:
+      - "5003:5003"
+    environment:
+      - EVIDENCE_PORT=5003
+      - EVIDENCE_DB_URL=postgres://postgres:postgres@postgres-evidence:5432/crashscribe_evidence?sslmode=disable
+      - STORAGE_PROVIDER=local
+      - LOCAL_STORAGE_PATH=/app/backend/storage/uploads
+    depends_on:
+      postgres-evidence:
+        condition: service_healthy
+    networks:
+      - crashscribe-net
+
+  # ==========================================
+  # Microservice 4: Assam Analytics & PostGIS (:5004)
+  # ==========================================
+  analytics-service:
+    build:
+      context: ./backend/services/analytics-service
+      dockerfile: Dockerfile
+    container_name: crashscribe-analytics
+    restart: unless-stopped
+    ports:
+      - "5004:5004"
+    environment:
+      - ANALYTICS_PORT=5004
+      - ANALYTICS_DB_URL=postgres://postgres:postgres@postgres-analytics:5432/crashscribe_analytics?sslmode=disable
+      - USE_RABBITMQ=true
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      postgres-analytics:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - crashscribe-net
+
+  # ==========================================
+  # Mobile Client (React / Vite PWA Shell :3000)
+  # ==========================================
+  mobile-client:
+    build:
+      context: ./mobile
+      dockerfile: Dockerfile
+    container_name: crashscribe-mobile-client
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - crashscribe-net
+
+  # ==========================================
+  # Databases (PostgreSQL Instances per service)
+  # ==========================================
+  postgres-auth:
+    image: postgres:16-alpine
+    container_name: crashscribe-db-auth
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: crashscribe_auth
+    volumes:
+      - pg-auth-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crashscribe-net
+
+  postgres-reports:
+    image: postgres:16-alpine
+    container_name: crashscribe-db-reports
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: crashscribe_reports
+    volumes:
+      - pg-reports-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crashscribe-net
+
+  postgres-evidence:
+    image: postgres:16-alpine
+    container_name: crashscribe-db-evidence
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: crashscribe_evidence
+    volumes:
+      - pg-evidence-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crashscribe-net
+
+  postgres-analytics:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: crashscribe-db-analytics
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: crashscribe_analytics
+    volumes:
+      - pg-analytics-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crashscribe-net
+
+  # ==========================================
+  # Message Broker & Cache
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: crashscribe-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - crashscribe-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: crashscribe-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crashscribe-net
+
+networks:
+  crashscribe-net:
+    driver: bridge
+
+volumes:
+  pg-auth-data:
+  pg-reports-data:
+  pg-evidence-data:
+  pg-analytics-data:

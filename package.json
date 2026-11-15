@@ -1,12 +1,26 @@
 {
-  "name": "crashscribe-backend",
+  "name": "crashscribe",
   "version": "1.0.0",
-  "description": "CrashScribe — Backend microservices for Assam Police accident reporting",
+  "description": "CrashScribe — Offline-First Accident Reporting System for Assam Police",
   "private": true,
   "workspaces": [
-    "backend/services/*"
+    "backend/services/*",
+    "mobile"
   ],
   "scripts": {
+    "start": "bash start.sh",
+    "start:mobile": "cd mobile && npm run dev",
+    "start:gateway": "cd backend/api-gateway && ./api-gateway",
+    "build": "npm run build --workspaces && (cd backend/api-gateway && go build -o api-gateway main.go)",
+    "build:backend": "npm run build --workspaces",
+    "build:mobile": "cd mobile && npm run build",
+    "test": "vitest run && (cd backend/api-gateway && go test -v ./...)",
+    "test:unit": "vitest run",
+    "test:gateway": "cd backend/api-gateway && go test -v ./...",
+    "test:e2e": "bash backend/scripts/run_e2e_tests.sh",
+    "test:docker": "bash backend/scripts/docker_smoke_test.sh",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
     "init:db": "bash backend/scripts/init_databases.sh"
   },
   "keywords": [
