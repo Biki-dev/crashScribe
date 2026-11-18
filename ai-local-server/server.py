@@ -5,6 +5,7 @@ Install the model artifacts into MODEL_DIRS before starting it.
 """
 
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -51,6 +52,55 @@ def model_path_or_id(model_id: str) -> str:
     return str(candidate) if candidate.exists() else model_id
 
 
+def prepare_indicconformer_local_code(source: str) -> None:
+    """Repair the upstream custom loader when IndicConformer was pasted locally.
+
+    Some released model_onnx.py files call snapshot_download() even when the
+    argument is a local directory. That makes huggingface_hub validate the
+    filesystem path as a repo ID. This idempotent repair keeps local setup
+    offline and avoids asking users to edit files inside their model folder.
+    """
+    model_dir = Path(source)
+    if not model_dir.is_dir():
+        return
+    loader = model_dir / "model_onnx.py"
+    if not loader.exists():
+        return
+
+    text = loader.read_text()
+    if "os.path.isdir(pretrained_model_name_or_path)" in text:
+        return
+    lines = text.splitlines()
+    target = next((i for i, line in enumerate(lines) if "loc = snapshot_download" in line), None)
+    if target is None:
+        return
+    end = target
+    while end + 1 < len(lines) and "return cls(" not in lines[end + 1]:
+        end += 1
+    indent = lines[target][: len(lines[target]) - len(lines[target].lstrip())]
+    replacement = [
+        f"{indent}if os.path.isdir(pretrained_model_name_or_path):",
+        f"{indent}    loc = pretrained_model_name_or_path",
+        f"{indent}else:",
+        f"{indent}    loc = snapshot_download(",
+        f"{indent}        repo_id=pretrained_model_name_or_path,",
+        f"{indent}        token=token,",
+        f"{indent}    )",
+    ]
+    if "import os" not in lines[:30]:
+        lines.insert(0, "import os")
+        target += 1
+        end += 1
+    lines[target : end + 1] = replacement
+    loader.write_text("\n".join(lines) + "\n")
+
+    cache_root = Path.home() / ".cache/huggingface/modules/transformers_modules"
+    if cache_root.exists():
+        for cached in cache_root.glob("ai4bharat*"):
+            if cached.is_dir():
+                shutil.rmtree(cached, ignore_errors=True)
+
+
 def convert_to_wav(audio_path: str) -> str:
     wav_path = f"{audio_path}.wav"
     subprocess.run(
@@ -66,6 +116,7 @@ def get_indic_model():
     global _asr_model, _asr_processor
     if _asr_model is None:
         source = model_path_or_id(INDIC_CONFORMER)
+        prepare_indicconformer_local_code(source)
         _asr_model = AutoModel.from_pretrained(source, trust_remote_code=True).to(DEVICE).eval()
         _asr_processor = AutoProcessor.from_pretrained(source, trust_remote_code=True)
     return _asr_model, _asr_processor
