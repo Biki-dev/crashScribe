@@ -69,7 +69,11 @@ def prepare_indicconformer_local_code(source: str) -> None:
 
     text = loader.read_text()
     if "os.path.isdir(pretrained_model_name_or_path)" in text:
-        return
+        try:
+            compile(text, str(loader), "exec")
+            return
+        except SyntaxError:
+            pass
     lines = text.splitlines()
     target = next((i for i, line in enumerate(lines) if "loc = snapshot_download" in line), None)
     if target is None:
