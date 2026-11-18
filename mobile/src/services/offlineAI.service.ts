@@ -60,10 +60,10 @@ function readEnv(name: string): string | undefined {
 function defaultConfig(): BrowserAIConfig {
   return {
     provider: (readEnv('VITE_AI_PROVIDER') as BrowserAIProvider | undefined) || 'local',
-    baseUrl: readEnv('VITE_AI_BASE_URL') || '',
+    baseUrl: readEnv('VITE_AI_BASE_URL') || 'http://127.0.0.1:8000',
     token: readEnv('VITE_AI_TOKEN'),
     asrModel: readEnv('VITE_AI_ASR_MODEL') || 'ai4bharat/indic-conformer-600m-multilingual',
-    translationUrl: readEnv('VITE_AI_TRANSLATION_URL'),
+    translationUrl: readEnv('VITE_AI_TRANSLATION_URL') || 'http://127.0.0.1:8000',
     translationModel: readEnv('VITE_AI_TRANSLATION_MODEL') || 'ai4bharat/indictrans2-indic-en-dist-200M',
   };
 }

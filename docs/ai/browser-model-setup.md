@@ -36,22 +36,22 @@ The model directories are optional individually. English ASR needs Whisper; Assa
 Start the adapter:
 
 ```bash
-uvicorn server:app --host 0.0.0.0 --port 8000
+uvicorn server:app --host 127.0.0.1 --port 8000
 ```
 
-The website must be served from an origin allowed by the adapter. For local Vite development, the default CORS origin is `http://localhost:3000`. If the website is served elsewhere:
+The website must be served from an origin allowed by the adapter. For local Vite development, the default CORS origins are `http://localhost:3000` and `http://127.0.0.1:3000`. If the website is served elsewhere:
 
 ```bash
 CRASHSCRIBE_ALLOWED_ORIGIN=https://your-site.example \
-  uvicorn server:app --host 0.0.0.0 --port 8000
+  uvicorn server:app --host 127.0.0.1 --port 8000
 ```
 
 Copy `mobile/.env.example` to `mobile/.env.local` and use:
 
 ```dotenv
 VITE_AI_PROVIDER=local
-VITE_AI_BASE_URL=http://localhost:8000
-VITE_AI_TRANSLATION_URL=http://localhost:8000
+VITE_AI_BASE_URL=http://127.0.0.1:8000
+VITE_AI_TRANSLATION_URL=http://127.0.0.1:8000
 ```
 
 Or enter the same values in Settings → Local AI Model Status. The local adapter exposes:

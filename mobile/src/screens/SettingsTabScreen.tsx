@@ -516,7 +516,7 @@ export const SettingsTabScreen: React.FC<SettingsTabScreenProps> = ({
             <option value="local">Local model server (recommended for privacy)</option>
             <option value="huggingface">Hugging Face hosted inference</option>
           </select>
-          <input value={aiConfig.baseUrl} onChange={(e) => setAIConfig({ ...aiConfig, baseUrl: e.target.value })} placeholder={aiConfig.provider === 'local' ? 'http://localhost:8000' : 'https://router.huggingface.co/hf-inference/models'} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white" />
+          <input value={aiConfig.baseUrl} onChange={(e) => setAIConfig({ ...aiConfig, baseUrl: e.target.value })} placeholder={aiConfig.provider === 'local' ? 'http://127.0.0.1:8000' : 'https://router.huggingface.co/hf-inference/models'} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white" />
           <input value={aiConfig.token || ''} onChange={(e) => setAIConfig({ ...aiConfig, token: e.target.value })} type="password" placeholder="API token (never commit this)" className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white" />
           <input value={aiConfig.asrModel} onChange={(e) => setAIConfig({ ...aiConfig, asrModel: e.target.value })} placeholder="ASR model ID" className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white" />
           <input value={aiConfig.translationUrl || ''} onChange={(e) => setAIConfig({ ...aiConfig, translationUrl: e.target.value })} placeholder="Translation URL (optional for English)" className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white" />
